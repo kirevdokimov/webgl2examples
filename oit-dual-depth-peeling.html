@@ -619,7 +619,7 @@
 
             // finalProgram.uBackColor = blendBack
             // depthPeelProgram.uTexture = image
-            // #region initials
+            // #region initials. draw(){
             gl.useProgram(finalProgram);
             gl.uniform1i(finalBackColorLocation, 6);
             gl.useProgram(depthPeelProgram);
@@ -633,9 +633,8 @@
 
             var NUM_PASS = 4;   // maximum rendered layer number = NUM_PASS * 2
 
+            // #endregion
             function draw() {
-
-                // #endregion
 
                 /*
                     blendBack = 0
@@ -725,6 +724,7 @@
                     depthPeelProgram.uDepth = depth0
                     depthPeelProgram.uFrontColor = front0
 
+                    target = (depth1, front1, back1)
                     drawSpheres(depthPeelProgram)
 
                     blendBack = blendEq FUNC_ADD, blendFuncSeparate gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA
@@ -741,7 +741,8 @@
 
                     depthPeelProgram.uDepth = depth1
                     depthPeelProgram.uFrontColor = front1
-
+                    
+                    target = (depth0, front0, back0)
                     drawSpheres(depthPeelProgram)
 
                     blendBack = blendEq FUNC_ADD, blendFuncSeparate gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA
