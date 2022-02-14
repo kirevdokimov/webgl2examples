@@ -77,6 +77,17 @@
         }
     </script>
     <script type="x-shader/fs" id="fragment-peeling">
+
+        // IN
+        uniform sampler2D uTexture;
+        uniform sampler2D uDepth;
+        uniform sampler2D uFrontColor;
+        // OUT
+        layout(location=0) out vec2 depth;  // RG32F, R - negative front depth, G - back depth
+        layout(location=1) out vec4 frontColor;
+        layout(location=2) out vec4 backColor;
+        //
+
         #version 300 es
         precision highp float;
         precision highp sampler2D;
@@ -224,6 +235,7 @@
     </script>
     
     <script>
+        //#region [ignore] initial things setup
         var canvas = document.getElementById("gl-canvas");
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -243,7 +255,9 @@
             console.error("FLOAT color buffer not available");
             document.body.innerHTML = "This example requires EXT_color_buffer_float which is unavailable on this system."
         }
+        //#endregion
 
+        //#region [ignore] object creation
         /////////////////////////
         // OBJECT DESCRIPTIONS
         /////////////////////////
@@ -275,7 +289,9 @@
                 0.5
             ), i * 4);
         }
+        //#endregion
 
+        //#region programs bindng
         ///////////////////////////////
         // DUAL DEPTH PEELING PROGRAM
         //////////////////////////////
@@ -358,7 +374,9 @@
         if (!gl.getProgramParameter(blendBackProgram, gl.LINK_STATUS)) {
             console.error(gl.getProgramInfoLog(blendBackProgram));
         }
+        //#endregion
 
+        //#region bind uniforms
         /////////////////////////
         // GET UNIFORM LOCATIONS
         /////////////////////////
@@ -375,6 +393,26 @@
         var finalBackColorLocation = gl.getUniformLocation(finalProgram, "uBackColor");
 
         var blendBackColorLocation = gl.getUniformLocation(blendBackProgram, "uBackColor");
+        //#endregion
+
+        /*
+            ( depth0 ) depthPeelBuffers[0].color_attachment0 = texture0 = depth RG
+            ( front0 ) depthPeelBuffers[0].color_attachment1 = texture1 = frontColor RGBA
+            ( back0  ) depthPeelBuffers[0].color_attachment2 = texture2 = backColor RGBA
+
+            ( depth1 ) depthPeelBuffers[1].color_attachment0 = texture3 = depth RG
+            ( front1 ) depthPeelBuffers[1].color_attachment1 = texture4 = frontColor RGBA
+            ( back1  ) depthPeelBuffers[1].color_attachment2 = texture5 = backColor RGBA
+            
+            ( blendBack ) blendBackBuffer.color_attachment0 = texture6 = blendBack RGBA
+        */
+
+        // ColorBuffers dont matter they just lint to some depthPeelBuffers
+        //#region setup buffers
+        // colorBuffers[0].color_attachment0 = depthPeelBuffers[0].color_attachment1 = texture1
+        // colorBuffers[0].color_attachment1 = depthPeelBuffers[0].color_attachment2 = texture2
+        // colorBuffers[1].color_attachment0 = depthPeelBuffers[0].color_attachment1 = texture4
+        // colorBuffers[1].color_attachment1 = depthPeelBuffers[0].color_attachment2 = texture5
 
         ////////////////////////////////
         //  SET UP FRAMEBUFFERS
@@ -393,6 +431,9 @@
         
         var blendBackBuffer = gl.createFramebuffer();
 
+
+
+        
         for (var i = 0; i < 2; i++) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, depthPeelBuffers[i]);
             var o = i * 3;
@@ -446,6 +487,9 @@
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
+        // #endregion
+
+        //#region [ignore] creationg scene objects
         /////////////////////
         // SET UP GEOMETRY
         /////////////////////
@@ -549,7 +593,10 @@
         var image = new Image();
 
         image.onload = function() {
+            // #endregion
 
+            //( texture9 ) = image RGBA UNSIGNED_BYTE
+            // #region create texture9
             ///////////////////////
             // BIND TEXTURES
             ///////////////////////
@@ -568,7 +615,11 @@
             gl.texStorage2D(gl.TEXTURE_2D, levels, gl.RGBA8, image.width, image.height);
             gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, image.width, image.height, gl.RGBA, gl.UNSIGNED_BYTE, image);
             gl.generateMipmap(gl.TEXTURE_2D);
+            //#endregion
 
+            // finalProgram.uBackColor = blendBack
+            // depthPeelProgram.uTexture = image
+            // #region initials
             gl.useProgram(finalProgram);
             gl.uniform1i(finalBackColorLocation, 6);
             gl.useProgram(depthPeelProgram);
@@ -584,6 +635,19 @@
 
             function draw() {
 
+                // #endregion
+
+                /*
+                    blendBack = 0
+                    depth0 = -99999, blend MAX
+                    front0 = 0
+                    back0 = 0
+
+                    depth1 = [0, 1, 0, 0]
+                    front1 = 0
+                    back1 = 0
+                */
+                //#region clear buffers
                 //////////////////////////////////
                 // 1. Initialize min-max depth buffer
                 //////////////////////////////////
@@ -610,11 +674,19 @@
                 gl.clearColor(0, 0, 0, 0);
                 gl.clear(gl.COLOR_BUFFER_BIT);
 
+                // depth0, blend MAX
                 // draw depth for first pass to peel
                 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, depthPeelBuffers[0]);
                 gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
                 gl.blendEquation(gl.MAX);
 
+                //#endregion
+
+                /*
+                    depthPeelProgram.uDepth = depth1
+                    depthPeelProgram.uFrontColor = frontColor1
+                */
+                //#region draw scene
                 gl.useProgram(depthPeelProgram);
                 gl.uniform1i(depthPeelDepthLocation, 3);
                 gl.uniform1i(depthPeelFrontColorLocation, 4);
@@ -634,6 +706,7 @@
                 gl.bufferSubData(gl.ARRAY_BUFFER, 0, modelMatrixData);
                 
                 gl.drawElementsInstanced(gl.TRIANGLES, sphere.indices.length, gl.UNSIGNED_SHORT, 0, spheres.length);
+                //#endregion
 
                 ////////////////////////////////////
                 // 2. Dual Depth Peeling Ping-Pong
@@ -642,10 +715,46 @@
                 var readId, writeId;
                 var offsetRead, offsetBack;
 
+                /*
+                    [ read = 0, write = 1, offsetBack = 3 ]
+
+                    depth1 = -99999, blend MAX
+                    front1 = 0, blend MAX
+                    back1 = 0, blend MAX
+
+                    depthPeelProgram.uDepth = depth0
+                    depthPeelProgram.uFrontColor = front0
+
+                    drawSpheres(depthPeelProgram)
+
+                    blendBack = blendEq FUNC_ADD, blendFuncSeparate gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA
+                    blendBackProgram.uBackColor = back1
+                    drawQuad(blendBackProgram)
+
+
+
+                    [ read = 1, write = 0, offsetBack = 0 ]
+
+                    depth0 = -99999, blend MAX
+                    front0 = 0, blend MAX
+                    back0 = 0, blend MAX
+
+                    depthPeelProgram.uDepth = depth1
+                    depthPeelProgram.uFrontColor = front1
+
+                    drawSpheres(depthPeelProgram)
+
+                    blendBack = blendEq FUNC_ADD, blendFuncSeparate gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA
+                    blendBackProgram.uBackColor = back0
+                    drawQuad(blendBackProgram)
+
+
+                */
                 for (var pass = 0; pass < NUM_PASS; pass++) {
                     readId = pass % 2;
                     writeId = 1 - readId;  // ping-pong: 0 or 1
                     
+                    //#region clear
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, depthPeelBuffers[writeId]);
                     gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
                     gl.clearColor(DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE, 0, 0);
@@ -659,6 +768,7 @@
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, depthPeelBuffers[writeId]);
                     gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
                     gl.blendEquation(gl.MAX);
+                    //#endregion
 
                     // update texture uniform
                     offsetRead = readId * 3;
@@ -666,10 +776,11 @@
                     gl.uniform1i(depthPeelDepthLocation, offsetRead);
                     gl.uniform1i(depthPeelFrontColorLocation, offsetRead + 1);
 
-                    // draw geometry
+                    // #region draw scene
                     gl.bindVertexArray(sphereArray);
                     gl.drawElementsInstanced(gl.TRIANGLES, sphere.indices.length, gl.UNSIGNED_SHORT, 0, spheres.length);
-                    
+                    //#endregion
+
                     // blend back color separately
                     offsetBack = writeId * 3;
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, blendBackBuffer);
@@ -682,6 +793,13 @@
                     gl.drawArrays(gl.TRIANGLES, 0, 6);
                 }
 
+                /*
+                    screen clear 0
+                    blend gl.ONE, gl.ONE_MINUS_SRC_ALPHA
+                    finalProgram.uFrontColor = offsetBack + 1
+                    drawQuad(finalProgram)
+                */
+                //#region final
                 //////////////////////////
                 // 3. Final
                 //////////////////////////
@@ -694,7 +812,8 @@
                 gl.uniform1i(finalFrontColorLocation, offsetBack + 1);
 
                 gl.bindVertexArray(quadArray);
-                gl.drawArrays(gl.TRIANGLES, 0, 6);                
+                gl.drawArrays(gl.TRIANGLES, 0, 6);      
+                //#endregion          
 
                 requestAnimationFrame(draw);
             }
