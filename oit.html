@@ -107,6 +107,7 @@
             vec3 normal = normalize(vNormal.xyz);
             vec2 uv = vUV;
 
+            // simple phong
             vec4 baseColor = vColor * texture(uTexture, uv);
             vec3 eyeDirection = normalize(uEyePosition.xyz - position);
             vec3 lightVec = uLightPosition.xyz - position;
@@ -119,6 +120,9 @@
 
             vec4 color = vec4((ambient + diffuse + specular) * baseColor.rgb, vColor.a);
             color.rgb *= color.a;
+
+            // accumulation phong color and alpha
+
             float w = weight(gl_FragCoord.z, color.a);
             accumColor = vec4(color.rgb * w, color.a);
             accumAlpha = color.a * w;
@@ -150,6 +154,7 @@
         }
     </script>
     <script>
+        //#region [ignore] canvas inits
         var canvas = document.getElementById("gl-canvas");
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -201,7 +206,13 @@
                 0.5
             ), i * 4);
         }
-
+        //#endregion
+        
+        /*
+            accumProgram = [vertex-accum, fragment-accum]
+            drawProgram = [vertex-quad, fragment-draw]
+        */
+        //#region 
         /////////////////////////
         // ACCUMULATION PROGRAM
         /////////////////////////
@@ -278,7 +289,16 @@
 
         var accumLocation = gl.getUniformLocation(drawProgram, "uAccumulate");
         var accumAlphaLocation = gl.getUniformLocation(drawProgram, "uAccumulateAlpha");
+        //#endregion
 
+        /*
+            accumBuffer
+                color_attachment_0 = accumTarget RGBA16F
+                color_attachment_1 = accumAlphaTarget R16F
+                depth_attachment = depthTarget DEPTH_COMPONENT16
+        
+        */
+        //#region 
         ////////////////////////////////
         //  SET UP FRAMEBUFFERS
         ////////////////////////////////
@@ -324,7 +344,9 @@
         ]);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        //#endregion
 
+        //#region [ignore] setup geometry
         /////////////////////
         // SET UP GEOMETRY
         /////////////////////
@@ -400,7 +422,8 @@
         ]), gl.STATIC_DRAW);
         gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(0);
-
+        //#endregion
+        //#region [ignore] setup uniforms
         //////////////////////
         // SET UP UNIFORMS
         //////////////////////
@@ -425,10 +448,10 @@
         var sceneUniformBuffer = gl.createBuffer();
         gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, sceneUniformBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, sceneUniformData, gl.STATIC_DRAW);
-
+        //#endregion
         var image = new Image();
-
         image.onload = function() {
+            //#region [ignore] bind image texture
 
             ///////////////////////
             // BIND TEXTURES
@@ -448,6 +471,8 @@
             gl.texStorage2D(gl.TEXTURE_2D, levels, gl.RGBA8, image.width, image.height);
             gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, image.width, image.height, gl.RGBA, gl.UNSIGNED_BYTE, image);
             gl.generateMipmap(gl.TEXTURE_2D);
+            //#endregion
+
 
             gl.activeTexture(gl.TEXTURE1);
             gl.bindTexture(gl.TEXTURE_2D, accumTarget);
@@ -458,6 +483,8 @@
             gl.useProgram(accumProgram);
             gl.uniform1i(textureLocation, 0);
 
+            // drawProgram.uAccumulate = accumTarget
+            // drawProgram.uAccumulateAlpha = accumAlphaTarget
             gl.useProgram(drawProgram);
             gl.uniform1i(accumLocation, 1);
             gl.uniform1i(accumAlphaLocation, 2);
@@ -466,10 +493,11 @@
 
             function draw() {
 
-                ////////////////////
-                // DRAW BOXES
-                ////////////////////
+                // DRAW SCENE
 
+                // renderTarget accumBuffer
+                // draw(spheres, accumProgram, blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE_MINUS_SRC_ALPHA))
+                //#region
                 gl.bindFramebuffer(gl.FRAMEBUFFER, accumBuffer);
                 gl.useProgram(accumProgram);
                 gl.bindVertexArray(sphereArray);
@@ -489,19 +517,18 @@
                 gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE_MINUS_SRC_ALPHA)
                 gl.clear(gl.COLOR_BUFFER_BIT);
                 gl.drawElementsInstanced(gl.TRIANGLES, sphere.indices.length, gl.UNSIGNED_SHORT, 0, spheres.length);
+                //#endregion
 
-
-                /////////
-                // DRAW
-                /////////
-
+                // renderTarget null
+                // draw(quad, drawProgram, blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA))
+                //#region 
                 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
                 gl.useProgram(drawProgram);
                 gl.bindVertexArray(quadArray);
                 gl.clear(gl.COLOR_BUFFER_BIT);
                 gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
                 gl.drawArrays(gl.TRIANGLES, 0, 6);                
-
+                //#endregion
                 requestAnimationFrame(draw);
             }
 

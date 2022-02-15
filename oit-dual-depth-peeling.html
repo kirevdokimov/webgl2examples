@@ -592,8 +592,8 @@
 
         var image = new Image();
 
+        // #endregion
         image.onload = function() {
-            // #endregion
 
             //( texture9 ) = image RGBA UNSIGNED_BYTE
             // #region create texture9
@@ -621,9 +621,9 @@
             // depthPeelProgram.uTexture = image
             // #region initials. draw(){
             gl.useProgram(finalProgram);
-            gl.uniform1i(finalBackColorLocation, 6);
+            gl.uniform1i(finalBackColorLocation, 6); // 6 in blendBack
             gl.useProgram(depthPeelProgram);
-            gl.uniform1i(depthPeelTextureLocation, 9);
+            gl.uniform1i(depthPeelTextureLocation, 9); // 9 is image texture, we dont care about it
 
             var rotationMatrix = mat4.create();
 
